@@ -6,6 +6,8 @@
 
 static const char *TAG = "esp_cam";
 
+#define CAMERA_MODEL_AI_THINKER
+
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -45,17 +47,19 @@ esp_err_t esp_cam_init(void) {
     config.pin_pwdn = PWDN_GPIO_NUM;
     config.pin_reset = RESET_GPIO_NUM;
 
-    config.xclk_freq_hz = 20000000;
-    config.pixel_format = PIXFORMAT_JPEG;
+    config.xclk_freq_hz = 16000000;
+    config.pixel_format = PIXFORMAT_JPEG; // Formato para streaming o fotos
 
     // Configuración fija optimizada para PSRAM (que el ESP32-CAM siempre usa)
-    config.frame_size = FRAMESIZE_QVGA;  // Bajamos de VGA a QVGA temporalmente
-    config.jpeg_quality = 12;
+    config.frame_size = FRAMESIZE_QVGA;  // Tamaño de imagen (QVGA, VGA, etc.)
+    config.jpeg_quality = 12;            // De 0 a 63 (menor número = mejor calidad)
     config.fb_count = 2;                 // Probamos con 1 solo buffer
     config.grab_mode = CAMERA_GRAB_LATEST;  // <--- Tomar siempre el último frame disponible
-    
-    // Forzar asignación en PSRAM para evitar desbordamientos de DMA interno
-    config.fb_location = CAMERA_FB_IN_PSRAM;
+   // config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+
+    config.fb_location = CAMERA_FB_IN_PSRAM;      // Forzar asignación en PSRAM para evitar desbordamientos de DMA interno
+
+    config.jpeg_buffer_size = 131072;  // .fb_size = CONFIG_CAMERA_JPEG_MODE_FRAME_SIZE 
     
     ESP_LOGI(TAG, "Configurando cámara con soporte de PSRAM.");
 
@@ -66,8 +70,33 @@ esp_err_t esp_cam_init(void) {
         return err;
     }
 
-    // Pequeña pausa crucial para que el sensor estabilice el reloj XCLK y los PLL internos
- //   vTaskDelay(pdMS_TO_TICKS(100));
+
+        // 3. CONFIGURACIÓN ANTIRRUIDO (AQUÍ VAN LOS CÓDIGOS)
+    sensor_t *s = esp_camera_sensor_get();
+    if (s != NULL) {
+        // Desactiva el Control de Ganancia Automático (AGC)
+        // Esto frena en seco el ruido digital (grano) en la oscuridad
+        s->set_gain_ctrl(s, 0); 
+
+        // Fijar una ganancia manual muy baja para mantener el archivo JPEG pequeño
+        // Valores típicos: 0 a 30 (Prueba con 2 o 5)
+        s->set_agc_gain(s, 2); 
+
+        // Desactivar el Balance de Blancos Automático (AWB)
+        // Evita saltos bruscos de color verde/azul en penumbra
+        s->set_awb_gain(s, 0);
+
+        // Desactivar el Control de Exposición Automático (AEC)
+        s->set_exposure_ctrl(s, 0);
+
+        // Compensar la oscuridad aumentando el tiempo que el obturador queda abierto
+        // Valores típicos: 0 a 1200. Al subirlo, la imagen se aclara sin generar ruido en los bytes.
+        s->set_aec_value(s, 600); 
+        
+        ESP_LOGI("CAMERA", "Filtros de bajo brillo aplicados con éxito.");
+    } else {
+        ESP_LOGE("CAMERA", "No se pudo obtener el puntero del sensor.");
+    }
     
     return ESP_OK;
 
