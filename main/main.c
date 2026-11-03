@@ -5,11 +5,12 @@
 #include "freertos/task.h"
 #include "esp32Cam.h"
 #include "sd.h" // Incluyes tu nuevo componente
+#include "wifi_server.h" // Tu nuevo componente de red
 
 static const char *TAG = "camera";
 
-const char* wifi_ssid = "EL_NOMBRE_DE_TU_WIFI";
-const char* wifi_password = "TU_CONTRASEÑA_WIFI";
+//const char* wifi_ssid = "EL_NOMBRE_DE_TU_WIFI";
+//const char* wifi_password = "TU_CONTRASEÑA_WIFI";
 
 
 void app_main(void) {
@@ -27,6 +28,9 @@ void app_main(void) {
         return;
     }
     
+    // 2. Levantar red Wi-Fi y Servidor Web
+    wifi_init_softap();
+    start_webserver();
 
     ESP_LOGI(TAG, "Sistema listo. Iniciando bucle de captura...");
     vTaskDelay(pdMS_TO_TICKS(2000));    // WAIT AL SENSOR ANTES DE CAPTURAR LA PRIMERA FOTO
@@ -47,7 +51,7 @@ void app_main(void) {
 
         }
 
-        vTaskDelay(pdMS_TO_TICKS(5000));      // Esperar 5 segundos antes de la siguiente foto
+        vTaskDelay(pdMS_TO_TICKS(15000));      // Esperar 5 segundos antes de la siguiente foto
 
     }
 
