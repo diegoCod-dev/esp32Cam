@@ -4,8 +4,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp32Cam.h"
-#include "sd.h" // Incluyes tu nuevo componente
-#include "wifi_server.h" // Tu nuevo componente de red
+#include "sd.h" // componente SD
+#include "wifi_server.h" // componente de red
+#include "mqtt_manager.h" // componente MQTT
 
 static const char *TAG = "camera";
 
@@ -17,13 +18,12 @@ void app_main(void) {
     
     ESP_LOGI(TAG, "Iniciando sistema...");
 
-    if (esp_cam_init() != ESP_OK) {         // Inicializar la cámara
+    if (esp_cam_init() != ESP_OK) {         // 1. Inicializar la cámara
         ESP_LOGE(TAG, "Error al inicializar la cámara.");
         return;
     }
 
-    // 2. Inicializar la Tarjeta SD usando tu función modular
-    if (sd_logger_init() != ESP_OK) {
+    if (sd_logger_init() != ESP_OK) {       // 2. Inicializar la Tarjeta SD
         ESP_LOGE(TAG, "No se pudo continuar sin la tarjeta SD.");
         return;
     }
@@ -31,6 +31,9 @@ void app_main(void) {
     // 2. Levantar red Wi-Fi y Servidor Web
     wifi_init_softap();
     start_webserver();
+
+    // 2. Iniciar el cliente MQTT apuntando a la IP de tu PC (Docker) y puerto 1883
+    mqtt_app_start("mqtt://172.24.176.1:1883"); // <-- Reemplaza 192.168.X.X por la IPv4 de tu PC
 
     ESP_LOGI(TAG, "Sistema listo. Iniciando bucle de captura...");
     vTaskDelay(pdMS_TO_TICKS(2000));    // WAIT AL SENSOR ANTES DE CAPTURAR LA PRIMERA FOTO
@@ -47,6 +50,12 @@ void app_main(void) {
             sd_logger_save_image(pic->buf, pic->len, pictureNumber);      // Guardar usando la función del componente
 
             ESP_LOGI(TAG, "¡ya guarde en la sd! Tamaño: %u bytes", pic->len); 
+
+            // 3. Enviar notificación por MQTT mediante la función modular
+            char payload[64];
+            snprintf(payload, sizeof(payload), "Foto #%d guardada (%u bytes)", pictureNumber, pic->len);
+            mqtt_send_status("esp32/camera/status", payload);
+            
             esp_cam_return(pic);       //liberar el fotograma para no saturar la memoria PSRAM
 
         }

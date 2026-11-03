@@ -10,9 +10,11 @@
 
 static const char *TAG = "wifi_server";
 
-#define WIFI_SSID "ESP32-CAM-SPIA"
-#define WIFI_PASS "12345678" // Mínimo 8 caracteres para WPA2
+#define WIFI_AP_SSID "ESP32-CAM-SPIA"
+#define WIFI_AP_PASS "12345678"
 
+#define WIFI_STA_SSID "MOVISTAR WIFI6471"    // <-- nombre de tu router
+#define WIFI_STA_PASS "976543210"    // <-- contraseña de tu router
 
 // Estructura auxiliar para pasar el contexto de la petición HTTP al callback
 typedef struct {
@@ -157,6 +159,49 @@ void wifi_init_softap(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+    
+    // Crear las dos interfaces de red (AP y Estación)
+    esp_netif_create_default_wifi_ap();
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    // Configuración de tu red propia (AP)
+    wifi_config_t wifi_ap_config = {
+        .ap = {
+            .ssid = WIFI_AP_SSID,
+            .ssid_len = strlen(WIFI_AP_SSID),
+            .channel = 1,
+            .password = WIFI_AP_PASS,
+            .max_connection = 4,
+            .authmode = WIFI_AUTH_WPA2_PSK
+        },
+    };
+
+    // Configuración para conectarse al router de casa (STA)
+    wifi_config_t wifi_sta_config = {
+        .sta = {
+            .ssid = WIFI_STA_SSID,
+            .password = WIFI_STA_PASS,
+        },
+    };
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_ap_config));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_sta_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Forzar la conexión de la parte STA al router
+    ESP_ERROR_CHECK(esp_wifi_connect());
+
+    ESP_LOGI(TAG, "Wi-Fi APSTA iniciado. AP: %s | Conectando a STA: %s", WIFI_AP_SSID, WIFI_STA_SSID);
+}
+
+/* void wifi_init_softap(void) {
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -181,4 +226,6 @@ void wifi_init_softap(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "Wi-Fi AP iniciado. SSID: %s", WIFI_SSID);
-}
+}*/
+
+
