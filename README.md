@@ -8,26 +8,26 @@ El proyecto permite capturar fotografías, almacenarlas en una tarjeta microSD y
 
 ## ✨ Funcionalidades
 
-- Captura de imágenes mediante ESP32-CAM.
-- Almacenamiento de fotografías en tarjeta microSD.
-- Access Point Wi-Fi propio.
-- Conexión a una red Wi-Fi externa mediante modo Station.
-- Servidor web para acceder a las fotografías almacenadas.
+- Captura de imágenes mediante ESP32-CAM con asignación obligatoria en **PSRAM**.
+- Almacenamiento de fotografías en tarjeta microSD mediante exclusión mutua (*mutex*).
+- Access Point Wi-Fi propio y conexión a red externa (Modo híbrido APSTA).
+- Servidor web HTTP con soporte de envío por bloques (*chunks*) para acceder a las fotografías.
 - Comunicación directa entre dispositivos mediante ESP-NOW.
 - Recepción remota del comando `CAPTURAR`.
 - Confirmación de captura mediante los mensajes `FOTO_OK` y `OK`.
-- Captura automática de respaldo mediante temporizador.
-- Configuración Wi-Fi mediante Kconfig.
-- Arquitectura modular basada en componentes de ESP-IDF.
+- Captura automática de respaldo mediante temporizador independiente.
+- **Configuración completa mediante Kconfig** tanto para los parámetros Wi-Fi, pines de hardware (`esp32Cam`) como para la habilitación de la memoria PSRAM.
+- Arquitectura modular basada en componentes de ESP-IDF documentados con **Doxygen**.
 
 ---
 
-## 🧰 Hardware
+## 🧰 Requisitos de Hardware y PSRAM
 
-- Placa ESP32-CAM.
-- Cámara integrada compatible con ESP32-CAM.
-- Tarjeta microSD.
-- Fuente de alimentación adecuada para la placa.
+- **Placa ESP32-CAM** (Modelo estándar AI-Thinker).
+- **Cámara OV2640** integrada.
+- **Memoria PSRAM obligatoria**: Es fundamental que el módulo cuente con PSRAM física (por ejemplo, el chip ESP32-S con la RAM externa de 4MB o 8MB añadida). Sin la PSRAM activa, la cámara no dispondrá de suficiente búfer de video y el sistema fallará al iniciar.
+- Tarjeta microSD formateada (FAT/FAT32).
+- Fuente de alimentación estable (capaz de soportar los picos de corriente del Wi-Fi y la cámara).
 - ESP-32S NodeMCU como dispositivo remoto para pruebas mediante ESP-NOW.
 
 ---
@@ -37,7 +37,7 @@ El proyecto permite capturar fotografías, almacenarlas en una tarjeta microSD y
 El proyecto está desarrollado utilizando:
 
 - Visual Studio Code.
-- ESP-IDF.
+- ESP-IDF (v6.0.3 o superior).
 - Extensión ESP-IDF para Visual Studio Code.
 - FreeRTOS.
 - Git y GitHub.
@@ -52,8 +52,7 @@ El sistema está organizado en componentes independientes para separar responsab
 components/
 ├── esp32Cam/
 ├── sd/
-├── wifi_manager/
-├── web_server/
+├── wifi_server/
 ├── espnow_manager/
 ├── capture_timer/
 └── mqtt_manager/
@@ -62,49 +61,22 @@ components/
 ### Componentes principales
 
 #### `esp32Cam`
-
-Responsable de la inicialización y utilización de la cámara.
+Responsable de la inicialización y utilización de la cámara OV2640. Fuerza la asignación de búferes en **PSRAM** (`CAMERA_FB_IN_PSRAM`) para evitar desbordamientos y es totalmente configurable mediante **Kconfig**.
 
 #### `sd`
+Gestiona la tarjeta microSD, el montaje del sistema de archivos FAT y el almacenamiento seguro de las imágenes utilizando un *mutex* para entornos multihilo.
 
-Gestiona la tarjeta microSD y el almacenamiento de las imágenes capturadas.
-
-#### `wifi_manager`
-
-Gestiona la inicialización y configuración de Wi-Fi.
-
-Está diseñado para admitir los siguientes modos:
-
-- Station (`STA`).
-- Access Point (`AP`).
-- Access Point + Station (`APSTA`).
-
-Su configuración se realiza mediante **Kconfig**, evitando guardar parámetros específicos directamente en el código fuente.
-
-#### `web_server`
-
-Implementa el servidor HTTP utilizado para acceder desde otro dispositivo a las fotografías almacenadas en la tarjeta microSD.
+#### `wifi_server`
+Unifica la gestión de red en modo híbrido **APSTA** (Access Point + Station) junto al servidor HTTP web que permite visualizar y descargar las imágenes de la tarjeta SD. Sus credenciales y parámetros de red se configuran a través de **Kconfig**.
 
 #### `espnow_manager`
-
-Componente genérico destinado a la comunicación ESP-NOW.
-
-Permite:
-
-- Inicializar ESP-NOW.
-- Registrar dispositivos remotos o *peers*.
-- Enviar información.
-- Recibir información mediante callbacks.
-
-El componente no contiene lógica específica de la aplicación. Los comandos y las respuestas se interpretan desde la aplicación principal, lo que permite reutilizar `espnow_manager` en otros proyectos.
+Componente genérico destinado a la comunicación ESP-NOW. Permite inicializar el servicio, registrar *peers*, enviar información y recibir datos mediante callbacks desvinculados de la lógica de negocio.
 
 #### `capture_timer`
-
-Temporizador independiente utilizado para generar capturas automáticas cuando no se reciben solicitudes externas durante un período determinado.
+Temporizador independiente basado en FreeRTOS utilizado para generar capturas automáticas de respaldo cuando no se reciben solicitudes externas durante un período determinado.
 
 #### `mqtt_manager`
-
-Componente reservado para una futura integración mediante MQTT. Actualmente no forma parte del flujo principal del sistema.
+Componente preparado para la publicación de telemetría y estados de la cámara hacia un broker MQTT local (por ejemplo, en Docker).
 
 ---
 
@@ -127,7 +99,7 @@ ESP-32S NodeMCU                    ESP32-CAM
        │                               │
        │──────── CAPTURAR ────────────>│
        │                               │
-       │                         Captura imagen
+       │                         Captura imagen (vía PSRAM)
        │                         Guarda en microSD
        │                               │
        │<──────── FOTO_OK ─────────────│
@@ -135,107 +107,58 @@ ESP-32S NodeMCU                    ESP32-CAM
        │─────────── OK ───────────────>│
 ```
 
-En la implementación de prueba, el ESP-32S NodeMCU envía `CAPTURAR` únicamente cuando se presiona su botón. La ESP32-CAM realiza la captura, guarda la imagen y responde `FOTO_OK`. Finalmente, el NodeMCU confirma la recepción mediante `OK`.
-
-ESP-NOW permite que ambos dispositivos se comuniquen directamente sin requerir un router ni acceso a Internet.
+En la implementación actual, el ESP-32S NodeMCU envía `CAPTURAR` al presionar su botón. La ESP32-CAM realiza la captura, guarda la imagen, reporta el estado vía MQTT, notifica al NodeMCU con `FOTO_OK`, y este confirma la recepción mediante `OK`.
 
 ### Captura automática de respaldo
 
-La ESP32-CAM también dispone de un mecanismo de respaldo.
+Si la ESP32-CAM no recibe el comando `CAPTURAR` durante el intervalo configurado, el componente `capture_timer` genera automáticamente una nueva solicitud de captura.
 
-Si no recibe el comando `CAPTURAR` durante el intervalo configurado, el componente `capture_timer` genera automáticamente una nueva solicitud de captura.
-
-El intervalo utilizado actualmente es de:
+El intervalo de respaldo configurado es de:
 
 ```text
 40 segundos
 ```
 
-Cada vez que se recibe una solicitud externa o se realiza una captura automática, el temporizador vuelve a comenzar.
+Cada vez que se procesa una solicitud externa o una captura automática, el temporizador se reinicia.
 
 ---
 
-## 📡 Configuración Wi-Fi con Kconfig
+## ⚙️ Configuración del Sistema (Kconfig y PSRAM)
 
-Los parámetros de red no se almacenan directamente dentro del código fuente del componente.
+Para garantizar la portabilidad y el correcto funcionamiento de la cámara, es necesario validar que la **PSRAM esté habilitada** en el menú de configuración de ESP-IDF.
 
-El componente `wifi_manager` utiliza el sistema **Kconfig** de ESP-IDF. Esto permite configurar cada proyecto sin modificar los archivos `.c` o `.h`.
+### Abrir el menú de configuración
 
-### Abrir la configuración
-
-Desde una terminal de ESP-IDF:
+Desde una terminal con el entorno de ESP-IDF activado:
 
 ```bash
 idf.py menuconfig
 ```
 
-También puede abrirse desde Visual Studio Code:
+O desde Visual Studio Code:
+1. Abrir la paleta de comandos (`F1` o `Ctrl+Shift+P`).
+2. Seleccionar: **ESP-IDF: SDK Configuration editor (menuconfig)**.
 
-```text
-ESP-IDF: SDK Configuration editor (menuconfig)
-```
-
-Luego ingresar en:
-
-```text
-Component config
-└── WiFi Manager Configuration
-```
-
-Desde este menú se pueden definir:
-
-- Modo de funcionamiento Wi-Fi.
-- SSID del Access Point.
-- Contraseña del Access Point.
-- SSID de la red Station.
-- Contraseña de la red Station.
-- Canal Wi-Fi.
-- Cantidad máxima de conexiones.
-- Cantidad máxima de reintentos de conexión.
-
-Esta configuración permite reutilizar `wifi_manager` en otros proyectos sin modificar su implementación.
+### Pasos críticos en el menú:
+1. **Habilitar la PSRAM:** Navega a `Component config` ➔ `ESP32-specific` (o `PHY` / `SPIRAM`) y asegúrate de marcar:
+   - `[*] Support for external, SPI-connected RAM` (SPI RAM support).
+   - `SPI RAM access method` ➔ Seleccionar *Try to allocate RAM in SPIRAM first* o *Allocated separately*.
+2. **Configuración de componentes:** En `Component config` podrás ajustar los pines de la cámara, las credenciales del Wi-Fi de la red local y del Access Point definido en los Kconfig de tus componentes.
 
 > [!CAUTION]
-> No se recomienda publicar credenciales reales. Si el archivo `sdkconfig` contiene datos sensibles, debe excluirse del repositorio mediante `.gitignore`.
-
----
-
-## 📨 Protocolo ESP-NOW
-
-El sistema utiliza actualmente los siguientes mensajes:
-
-| Mensaje | Origen | Destino | Función |
-|---|---|---|---|
-| `CAPTURAR` | ESP-32S NodeMCU | ESP32-CAM | Solicita una fotografía |
-| `FOTO_OK` | ESP32-CAM | ESP-32S NodeMCU | Informa que la fotografía fue realizada y guardada |
-| `OK` | ESP-32S NodeMCU | ESP32-CAM | Confirma la recepción de `FOTO_OK` |
-
-Las direcciones MAC se definen en la aplicación y no dentro del componente genérico `espnow_manager`.
-
----
-
-## 🌐 Servidor web
-
-La ESP32-CAM crea un servidor HTTP que permite acceder a las fotografías almacenadas en la tarjeta microSD.
-
-El servidor web se mantiene separado de `wifi_manager`:
-
-- `wifi_manager` administra la conectividad.
-- `web_server` administra las rutas HTTP y el acceso a las imágenes.
-
-Esta separación evita que la lógica de red quede acoplada al manejo de fotografías.
+> No se recomienda publicar credenciales reales en repositorios públicos. Asegúrate de excluir el archivo `sdkconfig` mediante `.gitignore`.
 
 ---
 
 ## 🔧 Compilación y carga
 
-### Compilar
+### Compilar el proyecto
 
 ```bash
 idf.py build
 ```
 
-### Grabar el firmware
+### Grabar el firmware en la placa
 
 ```bash
 idf.py flash
@@ -247,34 +170,4 @@ idf.py flash
 idf.py monitor
 ```
 
-También pueden utilizarse las acciones equivalentes de la extensión ESP-IDF para Visual Studio Code:
-
-```text
-Build → Flash → Monitor
-```
-
----
-
-## 📁 Diseño modular
-
-La aplicación principal coordina los componentes, pero cada uno mantiene una responsabilidad específica:
-
-```text
-Aplicación principal
-│
-├── Cámara
-├── microSD
-├── Wi-Fi
-├── Servidor web
-├── ESP-NOW
-├── Temporizador de respaldo
-└── MQTT (integración futura)
-```
-
-Esta organización facilita:
-
-- El mantenimiento del código.
-- La prueba independiente de cada módulo.
-- La reutilización de componentes.
-- La incorporación de nuevas funcionalidades.
-- La adaptación del proyecto a otras placas ESP32.
+También puedes realizar estas acciones directamente desde los accesos rápidos de la extensión de ESP-IDF en Visual Studio Code.
