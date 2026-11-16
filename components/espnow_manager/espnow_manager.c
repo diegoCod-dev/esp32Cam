@@ -1,3 +1,8 @@
+/**
+ * @file espnow_manager.c
+ * @brief Implementación del gestor de ESP-NOW para el manejo de red local sin router.
+ */
+
 #include "espnow_manager.h"
 
 #include <string.h>
@@ -6,14 +11,22 @@
 #include "esp_now.h"
 #include "esp_wifi.h"
 
+/** @brief Etiqueta (TAG) para el registro de logs (ESP_LOG) de este módulo. */
 static const char *TAG = "ESPNOW_MANAGER";
 
+/** @brief Puntero al callback de la aplicación superior para la entrega de mensajes. */
 static espnow_receive_callback_t application_receive_callback = NULL;
 
 
-/*
- * Callback interno de ESP-IDF.
- * ESP-IDF lo ejecuta automaticamente cuando llega un mensaje.
+/**
+ * @brief Callback interno de ESP-IDF para la recepción de paquetes.
+ * 
+ * Se ejecuta automáticamente por el framework cuando llega un mensaje ESP-NOW. 
+ * Valida la integridad básica y reenvía el contenido al callback registrado por la aplicación.
+ * 
+ * @param receive_info Información detallada de la recepción (incluye dirección MAC de origen).
+ * @param data Puntero a los datos recibidos.
+ * @param data_len Longitud de los datos recibidos en bytes.
  */
 static void espnow_internal_receive_callback(
     const esp_now_recv_info_t *receive_info,
@@ -51,9 +64,13 @@ static void espnow_internal_receive_callback(
 }
 
 
-/*
- * Callback interno ejecutado cuando finaliza
- * un intento de envio.
+/**
+ * @brief Callback interno ejecutado cuando finaliza un intento de transmisión.
+ * 
+ * Notifica mediante logs si el paquete fue entregado con éxito o si falló.
+ * 
+ * @param tx_info Información de transmisión de Wi-Fi.
+ * @param status Estado final del envío (ESP_NOW_SEND_SUCCESS o ESP_NOW_SEND_FAIL).
  */
 static void espnow_internal_send_callback(
     const wifi_tx_info_t *tx_info,
@@ -74,15 +91,15 @@ static void espnow_internal_send_callback(
 }
 
 
+/**
+ * @brief Inicializa el subsistema ESP-NOW y registra los callbacks internos.
+ */
 esp_err_t espnow_manager_init(void)
 {
     ESP_LOGI(TAG, "Inicializando ESP-NOW");
 
     /*
      * Este componente asume que Wi-Fi ya fue inicializado.
-     *
-     * Temporalmente se inicializa desde main.c.
-     * Mas adelante se utilizara un componente Wi-Fi reusable.
      */
 
     esp_err_t result = esp_now_init();
@@ -131,6 +148,9 @@ esp_err_t espnow_manager_init(void)
 }
 
 
+/**
+ * @brief Registra la función de la aplicación que procesara los mensajes recibidos.
+ */
 esp_err_t espnow_manager_register_receive_callback(
     espnow_receive_callback_t callback
 )
@@ -147,6 +167,9 @@ esp_err_t espnow_manager_register_receive_callback(
 }
 
 
+/**
+ * @brief Agrega un dispositivo remoto mediante su MAC.
+ */
 esp_err_t espnow_manager_add_peer(
     const uint8_t *peer_mac,
     uint8_t channel
@@ -200,6 +223,9 @@ esp_err_t espnow_manager_add_peer(
 }
 
 
+/**
+ * @brief Envia datos a un dispositivo previamente agregado.
+ */
 esp_err_t espnow_manager_send(
     const uint8_t *destination_mac,
     const void *data,
