@@ -1,0 +1,27 @@
+menu "Configuracion de Red Wi-Fi y Servidor"
+
+    config ESP32_WIFI_AP_SSID
+        string "SSID del Access Point (AP) del ESP32-CAM"
+        default "ESP32-CAM-SPIA"
+        help
+            Nombre de la red Wi-Fi propia que genera el ESP32-CAM para ver la galería.
+
+    config ESP32_WIFI_AP_PASS
+        string "Contraseña del Access Point (AP)"
+        default "12345678"
+        help
+            Contraseña para conectarse a la red AP del ESP32-CAM.
+
+    config ESP32_WIFI_STA_SSID
+        string "SSID del Router de Casa (STA)"
+        default "MOVISTAR WIFI6471"
+        help
+            Nombre de la red Wi-Fi del router doméstico para conectarse al broker MQTT.
+
+    config ESP32_WIFI_STA_PASS
+        string "Contraseña del Router de Casa (STA)"
+        default "976543210"
+        help
+            Contraseña de la red Wi-Fi del router doméstico.
+
+endmenu

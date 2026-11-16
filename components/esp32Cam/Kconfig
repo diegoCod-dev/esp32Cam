@@ -1,0 +1,73 @@
+menu "Configuracion de Camara ESP32-CAM"
+
+    config ESP32_CAM_MODEL_AI_THINKER
+        bool "Usar modelo AI-Thinker (por defecto)"
+        default y
+        help
+            Selecciona esta opcion si estás utilizando la placa ESP32-CAM estándar basada en AI-Thinker.
+
+    config ESP32_CAM_PIN_PWDN
+        int "GPIO Power Down (PWDN)"
+        default 32
+
+    config ESP32_CAM_PIN_RESET
+        int "GPIO Reset (-1 si no se usa)"
+        default -1
+
+    config ESP32_CAM_PIN_XCLK
+        int "GPIO XCLK"
+        default 0
+
+    config ESP32_CAM_PIN_SIOD
+        int "GPIO SIOD (SDA)"
+        default 26
+
+    config ESP32_CAM_PIN_SIOC
+        int "GPIO SIOC (SCL)"
+        default 27
+
+    config ESP32_CAM_PIN_D7
+        int "GPIO Data 7 (Y9)"
+        default 35
+
+    config ESP32_CAM_PIN_D6
+        int "GPIO Data 6 (Y8)"
+        default 34
+
+    config ESP32_CAM_PIN_D5
+        int "GPIO Data 5 (Y7)"
+        default 39
+
+    config ESP32_CAM_PIN_D4
+        int "GPIO Data 4 (Y6)"
+        default 36
+
+    config ESP32_CAM_PIN_D3
+        int "GPIO Data 3 (Y5)"
+        default 21
+
+    config ESP32_CAM_PIN_D2
+        int "GPIO Data 2 (Y4)"
+        default 19
+
+    config ESP32_CAM_PIN_D1
+        int "GPIO Data 1 (Y3)"
+        default 18
+
+    config ESP32_CAM_PIN_D0
+        int "GPIO Data 0 (Y2)"
+        default 5
+
+    config ESP32_CAM_PIN_VSYNC
+        int "GPIO VSYNC"
+        default 25
+
+    config ESP32_CAM_PIN_HREF
+        int "GPIO HREF"
+        default 23
+
+    config ESP32_CAM_PIN_PCLK
+        int "GPIO PCLK"
+        default 22
+
+endmenu
